@@ -3,7 +3,7 @@ use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::types::error::CallError;
 use jsonrpsee::types::ErrorObject;
 use katana_core::accounts::Account;
-use starknet::core::types::FieldElement;
+use starknet::core::types::{BlockId, FieldElement};
 use starknet_api::hash::StarkFelt;
 
 #[derive(thiserror::Error, Clone, Copy, Debug)]
@@ -47,6 +47,7 @@ pub trait KatanaApi {
     async fn get_storage_multiple(
         &self,
         storage_addresses: Vec<(ContractAddressFieldElement, Vec<StorageKeyFieldElement>)>,
+        block_id: BlockId,
     ) -> Result<Vec<Vec<StarkFelt>>, Error>;
 
     #[method(name = "setStorageAt")]

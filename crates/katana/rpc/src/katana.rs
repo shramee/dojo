@@ -1,7 +1,7 @@
 use jsonrpsee::core::{async_trait, Error};
 use katana_core::accounts::Account;
 use katana_core::sequencer::Sequencer;
-use starknet::core::types::FieldElement;
+use starknet::core::types::{BlockId, FieldElement};
 use starknet_api::core::{ContractAddress, PatriciaKey};
 use starknet_api::hash::{StarkFelt, StarkHash};
 use starknet_api::state::StorageKey;
@@ -62,7 +62,9 @@ where
     async fn get_storage_multiple(
         &self,
         storage_addresses: Vec<(ContractAddressFieldElement, Vec<StorageKeyFieldElement>)>,
+        block_id: BlockId,
     ) -> Result<Vec<Vec<StarkFelt>>, Error> {
+        self.sequencer.state(&block_id);
         self.sequencer
             .backend()
             .get_storages_at(storage_addresses)
