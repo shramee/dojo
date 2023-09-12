@@ -40,6 +40,7 @@ trait IWorld<T> {
     fn grant_owner(ref self: T, address: ContractAddress, target: felt252);
     fn revoke_owner(ref self: T, address: ContractAddress, target: felt252);
 
+    fn is_contract_writer(self: @T, component: felt252, system: ContractAddress) -> bool;
     fn is_writer(self: @T, component: felt252, system: felt252) -> bool;
     fn grant_writer(ref self: T, component: felt252, system: felt252);
     fn revoke_writer(ref self: T, component: felt252, system: felt252);
