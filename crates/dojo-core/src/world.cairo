@@ -14,20 +14,25 @@ struct Context {
 trait IWorld<T> {
     fn component(self: @T, name: felt252) -> ClassHash;
     fn register_component(ref self: T, class_hash: ClassHash);
+    fn register_system(ref self: T, contract_address: ContractAddress);
     fn uuid(ref self: T) -> usize;
     fn emit(self: @T, keys: Array<felt252>, values: Span<felt252>);
+    fn execute(
+        ref self: T, system: felt252, entrypoint: felt252, calldata: Array<felt252>
+    ) -> Span<felt252>;
     fn entity(
         self: @T, component: felt252, keys: Span<felt252>, offset: u8, length: usize
     ) -> Span<felt252>;
     fn set_entity(
-        ref self: T, writer: felt252, component: felt252, keys: Span<felt252>, offset: u8, value: Span<felt252>
+        ref self: T, component: felt252, keys: Span<felt252>, offset: u8, value: Span<felt252>
     );
     fn entities(
         self: @T, component: felt252, index: felt252, length: usize
     ) -> (Span<felt252>, Span<Span<felt252>>);
+    fn delete_entity(ref self: T, component: felt252, keys: Span<felt252>);
+
     fn set_executor(ref self: T, contract_address: ContractAddress);
     // fn executor(self: @T) -> ContractAddress;
-    fn delete_entity(ref self: T, writer: felt252, component: felt252, keys: Span<felt252>);
     // fn origin(self: @T) -> ContractAddress;
     // fn caller_system(self: @T) -> felt252;
 
@@ -35,9 +40,9 @@ trait IWorld<T> {
     fn grant_owner(ref self: T, address: ContractAddress, target: felt252);
     fn revoke_owner(ref self: T, address: ContractAddress, target: felt252);
 
-    fn is_writer(self: @T, name: felt252, component: felt252, address: ContractAddress) -> bool;
-    fn grant_writer(ref self: T, name: felt252, component: felt252, address: ContractAddress);
-    fn revoke_writer(ref self: T, name: felt252, component: felt252);
+    fn is_writer(self: @T, component: felt252, system: felt252) -> bool;
+    fn grant_writer(ref self: T, component: felt252, system: felt252);
+    fn revoke_writer(ref self: T, component: felt252, system: felt252);
 }
 
 #[starknet::contract]
