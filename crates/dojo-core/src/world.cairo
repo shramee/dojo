@@ -7,14 +7,13 @@ struct Context {
     world: IWorldDispatcher, // Dispatcher to the world contract
     origin: ContractAddress, // Address of the origin
     system: felt252, // Name of the calling system
-    system_class_hash: ClassHash, // Class hash of the calling system
 }
 
 #[starknet::interface]
 trait IWorld<T> {
     fn component(self: @T, name: felt252) -> ClassHash;
     fn register_component(ref self: T, class_hash: ClassHash);
-    fn register_system(ref self: T, contract_address: ContractAddress);
+    fn register_system(ref self: T, name: felt252, contract_address: ContractAddress);
     fn uuid(ref self: T) -> usize;
     fn emit(self: @T, keys: Array<felt252>, values: Span<felt252>);
     fn execute(
@@ -118,9 +117,10 @@ mod world {
         executor_dispatcher: IExecutorDispatcher,
         components: LegacyMap::<felt252, ClassHash>,
         systems: LegacyMap::<felt252, ContractAddress>,
+        system_names: LegacyMap::<ContractAddress, felt252>,
         nonce: usize,
         owners: LegacyMap::<(felt252, ContractAddress), bool>,
-        writers: LegacyMap::<(felt252, felt252), ContractAddress>,
+        writers: LegacyMap::<(felt252, felt252), bool>,
         // Tracks the origin executor.
         call_origin: ContractAddress,
         // Tracks the calling systems name for auth purposes.
@@ -192,17 +192,32 @@ mod world {
         ///
         /// # Arguments
         ///
-        /// * `name` - The name of the writer.
         /// * `component` - The name of the component.
-        /// * `address` - The writers contract address.
+        /// * `system` - The name of the system.
         ///
         /// # Returns
         ///
         /// * `bool` - True if the system is a writer of the component, false otherwise
-        fn is_writer(
-            self: @ContractState, name: felt252, component: felt252, address: ContractAddress
+        fn is_writer(self: @ContractState, component: felt252, system: felt252) -> bool {
+            self.writers.read((component, system))
+        }
+
+        /// Checks if the provided system is a writer of the component.
+        ///
+        /// # Arguments
+        ///
+        /// * `component` - The name of the component.
+        /// * `system` - The name of the system.
+        ///
+        /// # Returns
+        ///
+        /// * `bool` - True if the system is a writer of the component, false otherwise
+        fn is_contract_writer(
+            self: @ContractState, component: felt252, contract: ContractAddress
         ) -> bool {
-            self.writers.read((component, name)) == address
+            // @TODO Get system name from contract
+            let system_name = TODO!();
+            self.writers.read((component, system_name))
         }
 
         /// Grants writer permission to the system for the component.
@@ -210,19 +225,16 @@ mod world {
         ///
         /// # Arguments
         ///
-        /// * `name` - The name of the writer.
         /// * `component` - The name of the component.
-        /// * `address` - The writers contract address.
-        fn grant_writer(
-            ref self: ContractState, name: felt252, component: felt252, address: ContractAddress
-        ) {
+        /// * `system` - The name of the system.
+        fn grant_writer(ref self: ContractState, component: felt252, system: felt252) {
             let caller = get_caller_address();
 
             assert(
                 self.is_owner(caller, component) || self.is_owner(caller, WORLD),
                 'not owner or writer'
             );
-            self.writers.write((component, name), address);
+            self.writers.write((component, system), true);
         }
 
         /// Revokes writer permission to the system for the component.
@@ -230,19 +242,20 @@ mod world {
         ///
         /// # Arguments
         ///
-        /// * `name` - The name of the writer.
         /// * `component` - The name of the component.
-        fn revoke_writer(ref self: ContractState, name: felt252, component: felt252) {
+        /// * `system` - The name of the system.
+        fn revoke_writer(ref self: ContractState, component: felt252, system: felt252) {
             let caller = get_caller_address();
 
             assert(
-                self.is_writer(name, component, caller)
+                self.is_writer(component, self.caller_system())
                     || self.is_owner(caller, component)
                     || self.is_owner(caller, WORLD),
                 'not owner or writer'
             );
-            self.writers.write((component, name), starknet::contract_address_const::<0x0>());
+            self.writers.write((component, system), bool::False(()));
         }
+
 
         /// Registers a component in the world. If the component is already registered,
         /// the implementation will be updated.
@@ -282,6 +295,31 @@ mod world {
             self.components.read(name)
         }
 
+        /// Registers a system in the world. If the system is already registered,
+        /// the implementation will be updated.
+        ///
+        /// # Arguments
+        ///
+        /// * `class_hash` - The class hash of the system to be registered.
+        fn register_system(
+            ref self: ContractState, name: felt252, contract_address: ContractAddress
+        ) {
+            let caller = get_caller_address();
+
+            // If system is already registered, validate permission to update.
+            if self.systems.read(name).is_non_zero() {
+                assert(
+                    self.is_owner(caller, name) || self.is_owner(caller, WORLD),
+                    'only owner can update'
+                );
+            } else {
+                self.owners.write((name, caller), bool::True(()));
+            };
+
+            self.systems.write(name, contract_address);
+            EventEmitter::emit(ref self, SystemRegistered { name, contract_address });
+        }
+
         /// Executes a system with the given calldata.
         ///
         /// # Arguments
@@ -292,50 +330,58 @@ mod world {
         /// # Returns
         ///
         /// * `Span<felt252>` - The result of the system execution.
-        // fn execute(
-        //     ref self: ContractState, system: felt252, mut calldata: Array<felt252>
-        // ) -> Span<felt252> {
-        //     let stack_len = self.call_stack_len.read();
-        //     self.call_stack.write(stack_len, system);
-        //     self.call_stack_len.write(stack_len + 1);
+        fn execute(
+            ref self: ContractState,
+            system: felt252,
+            entrypoint: felt252,
+            mut calldata: Array<felt252>
+        ) -> Span<felt252> {
+            // let stack_len = self.call_stack_len.read();
+            // self.call_stack.write(stack_len, system);
+            // self.call_stack_len.write(stack_len + 1);
 
-        //     // Get the class hash of the system to be executed
-        //     let system_class_hash = self.systems.read(system);
+            // Get the class hash of the system to be executed
+            let system_contract = self.systems.read(system);
 
-        //     // If this is the initial call, set the origin to the caller
-        //     let mut call_origin = self.call_origin.read();
-        //     if stack_len.is_zero() {
-        //         call_origin = get_caller_address();
-        //         self.call_origin.write(call_origin);
-        //     }
+            // If this is the initial call, set the origin to the caller
+            // let mut call_origin = self.call_origin.read();
+            // if stack_len.is_zero() {
+            //     call_origin = get_caller_address();
+            //     self.call_origin.write(call_origin);
+            // }
 
-        //     let ctx = Context {
-        //         world: IWorldDispatcher {
-        //             contract_address: get_contract_address()
-        //         }, origin: self.call_origin.read(), system, system_class_hash,
-        //     };
+            let ctx = Context {
+                world: IWorldDispatcher { contract_address: get_contract_address() },
+                origin: self.call_origin.read(),
+                system,
+            };
 
-        //     // Add context to calldata
-        //     ctx.serialize(ref calldata);
+            // Add context to calldata
+            ctx.serialize(ref calldata);
 
-        //     // Call the system via executor
-        //     let res = self
-        //         .executor_dispatcher
-        //         .read()
-        //         .execute(ctx.system_class_hash, calldata.span());
+            // Call the system via executor
 
-        //     // Reset the current call stack frame
-        //     self.call_stack.write(stack_len, 0);
-        //     // Decrement the call stack pointer
-        //     self.call_stack_len.write(stack_len);
+            let mut ret_data = starknet::call_contract_syscall(
+                system_contract, selector!(entrypoint), array::ArrayTrait::span(calldata),
+            );
 
-        //     // If this is the initial call, reset the origin on exit
-        //     if stack_len.is_zero() {
-        //         self.call_origin.write(starknet::contract_address_const::<0x0>());
-        //     }
+            let res = self
+                .executor_dispatcher
+                .read()
+                .execute(ctx.system_class_hash, calldata.span());
 
-        //     res
-        // }
+            // Reset the current call stack frame
+            // self.call_stack.write(stack_len, 0);
+            // Decrement the call stack pointer
+            // self.call_stack_len.write(stack_len);
+
+            // If this is the initial call, reset the origin on exit
+            // if stack_len.is_zero() {
+            //     self.call_origin.write(starknet::contract_address_const::<0x0>());
+            // }
+
+            res
+        }
 
         /// Issues an autoincremented id to the caller.
         ///
