@@ -61,14 +61,14 @@ mod world {
 
     use dojo::database;
     use dojo::executor::{IExecutorDispatcher, IExecutorDispatcherTrait};
-    use dojo::component::{INamedDispatcher, INamedDispatcherTrait, };
+    use dojo::component::{INamedDispatcher, INamedDispatcherTrait,};
     use dojo::world::{IWorldDispatcher, IWorld};
 
     use super::Context;
 
     const NAME_ENTRYPOINT: felt252 =
         0x0361458367e696363fbcc70777d07ebbd2394e89fd0adcaf147faccd1d294d60;
-    
+
     const WORLD: felt252 = 0;
 
     #[event]
@@ -133,7 +133,9 @@ mod world {
         self.executor_dispatcher.write(IExecutorDispatcher { contract_address: executor });
         self
             .owners
-            .write((WORLD, starknet::get_tx_info().unbox().account_contract_address), bool::True(()));
+            .write(
+                (WORLD, starknet::get_tx_info().unbox().account_contract_address), bool::True(())
+            );
 
         EventEmitter::emit(
             ref self,
@@ -169,10 +171,7 @@ mod world {
         /// * `target` - The target.
         fn grant_owner(ref self: ContractState, address: ContractAddress, target: felt252) {
             let caller = get_caller_address();
-            assert(
-                self.is_owner(caller, target) || self.is_owner(caller, WORLD),
-                'not owner'
-            );
+            assert(self.is_owner(caller, target) || self.is_owner(caller, WORLD), 'not owner');
             self.owners.write((target, address), bool::True(()));
         }
 
@@ -185,11 +184,7 @@ mod world {
         /// * `target` - The target.
         fn revoke_owner(ref self: ContractState, address: ContractAddress, target: felt252) {
             let caller = get_caller_address();
-            assert(
-                self.is_owner(caller, target)
-                    || self.is_owner(caller, WORLD),
-                'not owner'
-            );
+            assert(self.is_owner(caller, target) || self.is_owner(caller, WORLD), 'not owner');
             self.owners.write((target, address), bool::False(()));
         }
 
@@ -204,7 +199,9 @@ mod world {
         /// # Returns
         ///
         /// * `bool` - True if the system is a writer of the component, false otherwise
-        fn is_writer(self: @ContractState, name: felt252, component: felt252, address: ContractAddress) -> bool {
+        fn is_writer(
+            self: @ContractState, name: felt252, component: felt252, address: ContractAddress
+        ) -> bool {
             self.writers.read((component, name)) == address
         }
 
@@ -216,12 +213,13 @@ mod world {
         /// * `name` - The name of the writer.
         /// * `component` - The name of the component.
         /// * `address` - The writers contract address.
-        fn grant_writer(ref self: ContractState, name: felt252, component: felt252, address: ContractAddress) {
+        fn grant_writer(
+            ref self: ContractState, name: felt252, component: felt252, address: ContractAddress
+        ) {
             let caller = get_caller_address();
 
             assert(
-                self.is_owner(caller, component)
-                    || self.is_owner(caller, WORLD),
+                self.is_owner(caller, component) || self.is_owner(caller, WORLD),
                 'not owner or writer'
             );
             self.writers.write((component, name), address);
@@ -262,9 +260,7 @@ mod world {
 
             // If component is already registered, validate permission to update.
             if self.components.read(name).is_non_zero() {
-                assert(
-                    self.is_owner(caller, name), 'only owner can update'
-                );
+                assert(self.is_owner(caller, name), 'only owner can update');
             } else {
                 self.owners.write((name, caller), bool::True(()));
             };
@@ -394,7 +390,9 @@ mod world {
         ///
         /// * `component` - The name of the component to be deleted.
         /// * `query` - The query to be used to find the entity.
-        fn delete_entity(ref self: ContractState, writer: felt252, component: felt252, keys: Span<felt252>) {
+        fn delete_entity(
+            ref self: ContractState, writer: felt252, component: felt252, keys: Span<felt252>
+        ) {
             assert_can_write(@self, writer, component);
 
             let key = poseidon::poseidon_hash_span(keys);
