@@ -21,13 +21,15 @@ pub fn parent_of_kind(
     db: &dyn cairo_lang_syntax::node::db::SyntaxGroup,
     target: &SyntaxNode,
     kind: SyntaxKind,
-) -> Option<SyntaxNode> {
+) -> Result<SyntaxNode, String> {
     let mut new_target = target.clone();
+    let mut log = "".to_string();
     while let Some(parent) = new_target.parent() {
         if kind == parent.kind(db) {
-            return Some(parent);
+            return Ok(parent);
         }
         new_target = parent;
+        log.push_str(&format!("{}\n", new_target.kind(db)));
     }
-    None
+    Err(log)
 }

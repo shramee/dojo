@@ -101,56 +101,73 @@ impl InlineMacroExprPlugin for SetMacro {
 
         let module_syntax_node =
             parent_of_kind(db, &syntax.as_syntax_node(), SyntaxKind::ItemModule);
-        let module_name = if let Some(module_syntax_node) = &module_syntax_node {
+        let module_name = if let Ok(module_syntax_node) = &module_syntax_node {
             let mod_ast = ItemModule::from_syntax_node(db, module_syntax_node.clone());
             mod_ast.name(db).as_syntax_node().get_text_without_trivia(db)
         } else {
-            eprintln!("Error: Couldn't get the module name.");
-            "".into()
+            return InlinePluginResult {
+                code: None,
+                diagnostics: vec![PluginDiagnostic {
+                    stable_ptr: syntax.stable_ptr().untyped(),
+                    message: format!(
+                        "Error, couldn't find the parent module.\n{}",
+                        module_syntax_node.err().unwrap()
+                    ),
+                }],
+            };
         };
 
         let fn_syntax_node =
             parent_of_kind(db, &syntax.as_syntax_node(), SyntaxKind::FunctionWithBody);
-        let fn_name = if let Some(fn_syntax_node) = &fn_syntax_node {
+        let fn_name = if let Ok(fn_syntax_node) = &fn_syntax_node {
             let fn_ast = FunctionWithBody::from_syntax_node(db, fn_syntax_node.clone());
             fn_ast.declaration(db).name(db).as_syntax_node().get_text_without_trivia(db)
         } else {
             // Unlikely to get here, but if we do.
-            eprintln!("Error: Couldn't get the function name.");
-            "".into()
+            return InlinePluginResult {
+                code: None,
+                diagnostics: vec![PluginDiagnostic {
+                    stable_ptr: syntax.stable_ptr().untyped(),
+                    message: format!(
+                        "Error, couldn't find the parent function.\n{}",
+                        module_syntax_node.err().unwrap()
+                    ),
+                }],
+            };
         };
 
         for (entity, syntax_node) in bundle {
-            // db.lookup_intern_file(key0);
-            if !module_name.is_empty() && !fn_name.is_empty() {
-                let mut system_writes = SYSTEM_WRITES.lock().unwrap();
-                // fn_syntax_node
-                if system_writes.get(&module_name).is_none() {
-                    system_writes.insert(module_name.clone(), HashMap::new());
-                }
-                let fns = system_writes.get_mut(&module_name).unwrap();
-                if fns.get(&fn_name).is_none() {
-                    fns.insert(fn_name.clone(), vec![]);
-                }
+            let mut system_writes = SYSTEM_WRITES.lock().unwrap();
+            if system_writes.get(&module_name).is_none() {
+                system_writes.insert(module_name.clone(), HashMap::new());
+            }
+            let fns = system_writes.get_mut(&module_name).unwrap();
+            if fns.get(&fn_name).is_none() {
+                fns.insert(fn_name.clone(), vec![]);
+            }
 
-                match syntax_node.kind(db) {
-                    SyntaxKind::ExprPath => {
-                        fns.get_mut(&fn_name).unwrap().push(SystemRWOpRecord::Path(
-                            ExprPath::from_syntax_node(db, syntax_node),
-                        ));
-                    }
-                    // SyntaxKind::StatementExpr => {
-                    //     todo!()
-                    // }
-                    SyntaxKind::ExprStructCtorCall => {
-                        fns.get_mut(&fn_name).unwrap().push(SystemRWOpRecord::StructCtor(
-                            ExprStructCtorCall::from_syntax_node(db, syntax_node.clone()),
-                        ));
-                    }
-                    _ => eprintln!(
-                        "Unsupport component value type {} for semantic writer analysis",
-                        syntax_node.kind(db)
-                    ),
+            match syntax_node.kind(db) {
+                SyntaxKind::ExprPath => {
+                    fns.get_mut(&fn_name)
+                        .unwrap()
+                        .push(SystemRWOpRecord::Path(ExprPath::from_syntax_node(db, syntax_node)));
+                }
+                SyntaxKind::ExprStructCtorCall => {
+                    fns.get_mut(&fn_name).unwrap().push(SystemRWOpRecord::StructCtor(
+                        ExprStructCtorCall::from_syntax_node(db, syntax_node.clone()),
+                    ));
+                }
+                _ => {
+                    return InlinePluginResult {
+                        code: None,
+                        diagnostics: vec![PluginDiagnostic {
+                            stable_ptr: syntax.stable_ptr().untyped(),
+                            message: format!(
+                                "Unsupport component value type {} for semantic writer analysis",
+                                syntax_node.kind(db)
+                            ),
+                        }],
+                    };
                 }
             }
 

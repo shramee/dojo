@@ -84,22 +84,29 @@ impl InlineMacroExprPlugin for GetMacro {
 
         let module_syntax_node =
             parent_of_kind(db, &syntax.as_syntax_node(), SyntaxKind::ItemModule);
-        let module_name = if let Some(module_syntax_node) = &module_syntax_node {
+        let module_name = if let Ok(module_syntax_node) = &module_syntax_node {
             let mod_ast = ItemModule::from_syntax_node(db, module_syntax_node.clone());
             mod_ast.name(db).as_syntax_node().get_text_without_trivia(db)
         } else {
-            eprintln!("Error: Couldn't get the module name.");
-            "".into()
+            return InlinePluginResult {
+                code: None,
+                diagnostics: vec![PluginDiagnostic {
+                    stable_ptr: syntax.stable_ptr().untyped(),
+                    message: format!(
+                        "Error, couldn't find the parent module.\n{}",
+                        module_syntax_node.err().unwrap()
+                    ),
+                }],
+            };
         };
 
         for model in &models {
-            if !module_name.is_empty() {
-                if system_reads.get(&module_name).is_none() {
-                    system_reads.insert(module_name.clone(), vec![model.to_string()]);
-                } else {
-                    system_reads.get_mut(&module_name).unwrap().push(model.to_string());
-                }
+            if system_reads.get(&module_name).is_none() {
+                system_reads.insert(module_name.clone(), vec![model.to_string()]);
+            } else {
+                system_reads.get_mut(&module_name).unwrap().push(model.to_string());
             }
+
             let mut lookup_err_msg = format!("{} not found", model.to_string());
             lookup_err_msg.truncate(CAIRO_ERR_MSG_LEN);
             let mut deser_err_msg = format!("{} failed to deserialize", model.to_string());
