@@ -62,6 +62,15 @@ impl Vec2Impl of Vec2Trait {
     }
 }
 
+#[derive(Copy, Drop, Serde, Print, Introspect)]
+enum Quadrant {
+    //         x    |    y
+    PP, // Positive | Positive
+    PN, // Positive | Negative
+    NN, // Negative | Negative
+    NP, // Negative | Positive
+}
+
 #[cfg(test)]
 mod tests {
     use debug::PrintTrait;

@@ -11,7 +11,7 @@ trait IActions<TContractState> {
 #[dojo::contract]
 mod actions {
     use starknet::{ContractAddress, get_caller_address};
-    use dojo_examples::models::{Position, Moves, Direction, Vec2};
+    use dojo_examples::models::{Position, Moves, Direction, Vec2, Quadrant};
     use dojo_examples::utils::next_position;
     use super::IActions;
 
@@ -25,6 +25,31 @@ mod actions {
     struct Moved {
         player: ContractAddress,
         direction: Direction
+    }
+
+    #[external(v0)]
+    #[computed]
+    fn tile_terrain(self: @ContractState, vec: Vec2) -> felt252 {
+        'land'
+    }
+
+    #[external(v0)]
+    #[computed(Position)]
+    fn quadrant(self: @ContractState, pos: Position) -> Quadrant {
+        // 10 is zero
+        if pos.vec.x < 10 {
+            if pos.vec.y < 10 {
+                Quadrant::NN
+            } else {
+                Quadrant::NP
+            }
+        } else {
+            if pos.vec.y < 10 {
+                Quadrant::PN
+            } else {
+                Quadrant::PP
+            }
+        }
     }
 
     // impl: implement functions specified in trait
