@@ -1,14 +1,20 @@
 mod proxy;
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use camino::Utf8PathBuf;
 use clap::Parser;
+use dojo_types::primitive::Primitive;
+use dojo_types::schema::Ty;
 use dojo_world::contracts::world::WorldContractReader;
+use dojo_world::manifest::{abi, ComputedValueEntrypoint, Manifest};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 use starknet::core::types::FieldElement;
+use starknet::core::utils::get_selector_from_name;
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::JsonRpcClient;
 use tokio::sync::broadcast;
@@ -21,8 +27,8 @@ use torii_core::processors::store_set_record::StoreSetRecordProcessor;
 use torii_core::processors::store_transaction::StoreTransactionProcessor;
 use torii_core::simple_broker::SimpleBroker;
 use torii_core::sql::Sql;
-use torii_core::types::Model;
-use tracing::info;
+use torii_core::types::{ComputedValueCall, Model};
+use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
 use url::Url;
 
@@ -35,6 +41,11 @@ struct Args {
     /// The world to index
     #[arg(short, long = "world", env = "DOJO_WORLD_ADDRESS")]
     world_address: FieldElement,
+
+    /// Path to build manifest.json file.
+    #[arg(short, long, env = "DOJO_MANIFEST_PATH")]
+    pub manifest_json: Option<Utf8PathBuf>,
+
     /// The rpc endpoint to use
     #[arg(long, default_value = "http://localhost:5050")]
     rpc: String,
@@ -98,10 +109,14 @@ async fn main() -> anyhow::Result<()> {
     // Get world address
     let world = WorldContractReader::new(args.world_address, &provider);
 
+    let computed_values = computed_value_entrypoints(args.manifest_json);
+
+    println!("{:#?}", computed_values);
+
     let mut db = Sql::new(pool.clone(), args.world_address).await?;
     let processors = Processors {
         event: vec![
-            Box::new(RegisterModelProcessor),
+            Box::new(RegisterModelProcessor { computed_values }),
             Box::new(StoreSetRecordProcessor),
             Box::new(MetadataUpdateProcessor),
         ],
@@ -177,4 +192,94 @@ async fn spawn_rebuilding_graphql_server(
             break;
         }
     }
+}
+
+fn function_return_type_from_abi(
+    computed_val_fn: &ComputedValueEntrypoint,
+    abi: &Option<abi::Contract>,
+) -> Ty {
+    match abi {
+        Some(abi) => abi
+            .clone()
+            .into_iter()
+            .find_map(|i| {
+                if let abi::Item::Function(fn_item) = i {
+                    if fn_item.name != computed_val_fn.entrypoint {
+                        return None;
+                    }
+
+                    Some(match fn_item.outputs[0].ty.as_str() {
+                        "core::integer::u8" => Ty::Primitive(Primitive::U8(None)),
+                        "core::integer::u16" => Ty::Primitive(Primitive::U16(None)),
+                        "core::integer::u32" => Ty::Primitive(Primitive::U32(None)),
+                        "core::integer::u64" => Ty::Primitive(Primitive::U64(None)),
+                        "core::integer::u128" => Ty::Primitive(Primitive::U128(None)),
+                        "core::integer::u256" => Ty::Primitive(Primitive::U256(None)),
+                        "core::bool" => Ty::Primitive(Primitive::Bool(None)),
+                        "core::felt252" => Ty::Primitive(Primitive::Felt252(None)),
+                        "core::starknet::class_hash::ClassHash" => {
+                            Ty::Primitive(Primitive::ClassHash(None))
+                        }
+                        "core::starknet::contract_address::ContractAddress" => {
+                            Ty::Primitive(Primitive::ContractAddress(None))
+                        }
+                        ty => {
+                            panic!(
+                                "Unsupported computed value type {ty}. Only primitives \
+                                 supported.\n{:?}",
+                                computed_val_fn
+                            )
+                        }
+                    })
+                } else {
+                    None
+                }
+            })
+            .unwrap(),
+        None => {
+            error!("Error, Contract ABI not found.");
+            Ty::Tuple(vec![])
+        }
+    }
+}
+
+fn computed_value_entrypoints(
+    manifest_json: Option<Utf8PathBuf>,
+) -> HashMap<String, Vec<ComputedValueCall>> {
+    let mut computed_values: HashMap<String, Vec<ComputedValueCall>> = HashMap::new();
+    if let Some(manifest) = manifest_json {
+        match Manifest::load_from_path(manifest) {
+            Ok(manifest) => {
+                manifest.contracts.iter().for_each(|contract| {
+                    contract.computed.iter().for_each(|computed_val_fn| {
+                        if let Some(model_name) = computed_val_fn.model.clone() {
+                            let return_type =
+                                function_return_type_from_abi(computed_val_fn, &contract.abi);
+                            let contract_entrypoint = ComputedValueCall {
+                                contract_address: contract.address.unwrap(),
+                                entry_point_selector: get_selector_from_name(
+                                    &computed_val_fn.entrypoint.to_string(),
+                                )
+                                .unwrap(),
+                                return_type,
+                            };
+                            match computed_values.get_mut(&model_name) {
+                                Some(model_computed_values) => {
+                                    model_computed_values.push(contract_entrypoint);
+                                }
+                                None => {
+                                    computed_values.insert(model_name, vec![contract_entrypoint]);
+                                }
+                            };
+                        }
+                    })
+                });
+            }
+            Err(err) => {
+                error!("Manifest error: \n{:?}", err);
+            }
+        }
+        // model
+    };
+    computed_values
 }

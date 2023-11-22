@@ -6,6 +6,7 @@ use starknet::providers::Provider;
 
 use crate::sql::Sql;
 
+pub mod deployed_contract;
 pub mod metadata_update;
 pub mod register_model;
 pub mod store_set_record;

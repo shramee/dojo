@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use chrono::Utc;
 use dojo_types::primitive::Primitive;
 use dojo_types::schema::Ty;
+use dojo_world::manifest::Manifest;
 use dojo_world::metadata::WorldMetadata;
 use sqlx::pool::PoolConnection;
 use sqlx::{Pool, Sqlite};
@@ -74,8 +75,27 @@ impl Sql {
         Ok(meta)
     }
 
+    pub fn model_ty_add_computed_values(
+        &mut self,
+        mut model: Ty,
+        manifest: &Option<Manifest>,
+    ) -> Ty {
+        if let Some(manifest) = manifest {
+            manifest.contracts.iter().for_each(|c| {
+                c.computed.iter().for_each(|computed| {
+                    if computed.model.clone().unwrap_or("".into()) == model.name() {
+                        println!("\n\n{:?}\n\n{:?}\n\n", c, computed)
+                    }
+                })
+            });
+            // model
+        };
+        model
+    }
+
     pub async fn register_model(
         &mut self,
+        // manifest: &Option<Manifest>,
         model: Ty,
         layout: Vec<FieldElement>,
         class_hash: FieldElement,

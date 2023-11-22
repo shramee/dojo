@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::{Error, Ok, Result};
 use async_trait::async_trait;
 use dojo_world::contracts::model::ModelReader;
@@ -9,9 +11,12 @@ use tracing::info;
 
 use super::EventProcessor;
 use crate::sql::Sql;
+use crate::types::ComputedValueCall;
 
 #[derive(Default)]
-pub struct RegisterModelProcessor;
+pub struct RegisterModelProcessor {
+    pub computed_values: HashMap<String, Vec<ComputedValueCall>>,
+}
 
 #[async_trait]
 impl<P> EventProcessor<P> for RegisterModelProcessor
@@ -54,7 +59,15 @@ where
 
         info!("Registered model: {}", name);
 
-        db.register_model(schema, layout, event.data[1], packed_size, unpacked_size).await?;
+        db.register_model(
+            // &computed_values,
+            schema,
+            layout,
+            event.data[1],
+            packed_size,
+            unpacked_size,
+        )
+        .await?;
 
         Ok(())
     }

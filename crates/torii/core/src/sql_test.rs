@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::collections::HashMap;
 
 use dojo_test_utils::compiler::build_test_config;
 use dojo_test_utils::migration::prepare_migration;
@@ -44,7 +45,10 @@ where
         db,
         provider,
         Processors {
-            event: vec![Box::new(RegisterModelProcessor), Box::new(StoreSetRecordProcessor)],
+            event: vec![
+                Box::new(RegisterModelProcessor { computed_values: HashMap::new() }),
+                Box::new(StoreSetRecordProcessor),
+            ],
             ..Processors::default()
         },
         EngineConfig::default(),

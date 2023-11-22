@@ -1,6 +1,7 @@
 use core::fmt;
 
 use chrono::{DateTime, Utc};
+use dojo_types::schema::Ty;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use starknet::core::types::FieldElement;
@@ -57,4 +58,11 @@ pub struct Event {
     pub data: String,
     pub transaction_hash: String,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ComputedValueCall {
+    pub contract_address: FieldElement,
+    pub entry_point_selector: FieldElement,
+    pub return_type: Ty,
 }

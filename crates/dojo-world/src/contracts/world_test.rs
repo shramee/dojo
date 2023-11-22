@@ -31,6 +31,29 @@ async fn test_world_contract_reader() {
     assert_eq!(executor, executor_address);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_world_function_call() {
+    let sequencer =
+        TestSequencer::start(SequencerConfig::default(), get_default_test_starknet_config()).await;
+    let account = sequencer.account();
+    let provider = account.provider();
+    let target_dev_path =
+        Utf8PathBuf::from_path_buf("../../examples/spawn-and-move/target/dev".into()).unwrap();
+    let (world_address, executor_address) = deploy_world(&sequencer, target_dev_path.clone()).await;
+
+    let world = WorldContractReader::new(world_address, provider);
+
+    let manifest = Manifest::load_from_path(target_dev_path.join("manifest.json")).unwrap();
+
+    manifest.contracts.iter().for_each(|contract| {
+        println!("{}", contract.name);
+    })
+
+    // let response = world.function_call(contract_address, calldata, entry_point);
+
+    // assert_eq!(executor, executor_address);
+}
+
 pub async fn deploy_world(
     sequencer: &TestSequencer,
     path: Utf8PathBuf,
@@ -91,6 +114,7 @@ pub async fn deploy_world(
     tokio::time::sleep(Duration::from_millis(250)).await;
 
     for contract in strategy.contracts {
+        println!("{:#?}", contract);
         let declare_res = contract.declare(&account, Default::default()).await.unwrap();
         contract
             .world_deploy(world_address, declare_res.class_hash, &account, Default::default())

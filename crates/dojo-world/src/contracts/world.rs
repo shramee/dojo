@@ -322,6 +322,22 @@ where
 
         Ok(res)
     }
+
+    pub async fn function_call(
+        &self,
+        contract_address: FieldElement,
+        calldata: Vec<FieldElement>,
+        entry_point: &str,
+    ) -> Result<Vec<FieldElement>, ContractReaderError> {
+        let entry_point_selector =
+            get_selector_from_name(entry_point).expect("invalid selector name");
+        let res = self
+            .provider
+            .call(FunctionCall { calldata, contract_address, entry_point_selector }, self.block_id)
+            .await?;
+
+        Ok(res)
+    }
 }
 
 impl<'a, P> WorldContractReader<P>
