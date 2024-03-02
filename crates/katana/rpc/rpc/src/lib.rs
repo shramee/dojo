@@ -68,6 +68,7 @@ pub async fn spawn(sequencer: Arc<KatanaSequencer>, config: ServerConfig) -> Res
         .set_host_filtering(AllowHosts::Any)
         .set_middleware(middleware)
         .max_connections(config.max_connections)
+        .max_request_body_size(config.max_request_body_size)
         .build(config.addr())
         .await?;
 

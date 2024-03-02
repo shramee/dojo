@@ -128,6 +128,11 @@ pub struct ServerOptions {
     #[arg(default_value = "100")]
     #[arg(help = "Maximum number of concurrent connections allowed.")]
     pub max_connections: u32,
+
+    #[arg(long)]
+    #[arg(default_value = "33554432")] // 32MB
+    #[arg(help = "Maximum size in bytes of a request.")]
+    max_request_body_size: u32,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -229,6 +234,7 @@ impl KatanaArgs {
             port: self.server.port,
             host: self.server.host.clone().unwrap_or("0.0.0.0".into()),
             max_connections: self.server.max_connections,
+            max_request_body_size: self.server.max_request_body_size,
         }
     }
 

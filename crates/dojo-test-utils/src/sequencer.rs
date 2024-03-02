@@ -43,6 +43,7 @@ impl TestSequencer {
                 port: 0,
                 host: "127.0.0.1".into(),
                 max_connections: 100,
+                max_request_body_size: 32 * 1024 * 1024,
                 apis: vec![ApiKind::Starknet, ApiKind::Katana, ApiKind::Torii, ApiKind::Dev],
             },
         )
